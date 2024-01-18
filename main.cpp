@@ -1,21 +1,38 @@
 #include "keymaps.h"
-#include <asm-generic/ioctls.h>
 #include <csignal>
+#include <cstdio>
+#include <fstream>
 #include <ios>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <vector>
 
 typedef unsigned short int usint;
 
-struct editorConfig {
-  termios initalConfig;
-  usint nRows, nCols;
+class Line {
+public:
+  Line(const std::string &line) : text(line){};
 
+private:
+  std::string text;
+  friend std::ostream &operator<<(std::ostream &, const Line &);
+};
+
+std::ostream &operator<<(std::ostream &os, const Line &line) {
+  os << line.text; // Add wraparound
+  return os;
+}
+
+struct EditorConfig {
+  termios initalConfig;
+  usint nRows = 0, nCols = 0;
+  usint currLine = 0;
+  std::vector<Line> lines;
 } config;
 
-std::ostream &operator<<(std::ostream &os, const editorConfig &config) {
+std::ostream &operator<<(std::ostream &os, const EditorConfig &config) {
   os << config.nRows << " " << config.nCols;
   return os;
 }
@@ -39,31 +56,56 @@ void enableRawMode() {
   tcsetattr(STDERR_FILENO, TCSAFLUSH, &raw);
 }
 
-void getTerminalSize(int signal) {
-  if (signal != SIGWINCH)
-    return;
-
+void getTerminalSize(int) {
   winsize w;
   ioctl(STDIN_FILENO, TIOCGWINSZ, &w);
   config.nCols = w.ws_col;
   config.nRows = w.ws_row;
-  std::cout << config << "\n";
+  config.lines.reserve(config.nRows);
+}
+
+void parseFile(const std::string &file) {
+  std::ifstream inputFile(file);
+  if (!inputFile.is_open()) {
+    std::cout << "could not open file" << NEXTLINE;
+    return;
+  }
+
+  std::string line;
+  while (std::getline(inputFile, line)) {
+    config.lines.push_back(line);
+  }
+  inputFile.close();
+}
+
+void draw(){
+  std::cout << ERASESCREEN;
+
+  for(usint i = 0; i < config.nRows; ++i){
+    i += config.currLine;
+    std::cout << config.lines[i] << NEXTLINE;
+  }
 }
 
 int main() {
-  std::cout << std::unitbuf;
+  std::cout << std::unitbuf << ERASESCREEN << HOME;
 
   enableRawMode();
+  getTerminalSize(0); 
+  parseFile("main.cpp");
+  draw();
 
   struct sigaction resize;
   resize.sa_handler = getTerminalSize;
   sigaction(SIGWINCH, &resize, NULL);
+  
 
   char key;
-
   while (std::cin.get(key) && key != 'q') {
     std::cout << key;
+    if (key == 'n') {
+      std::cout << NEXTLINE;
+    }
   }
-
   return 0;
 }

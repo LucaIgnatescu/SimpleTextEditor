@@ -7,6 +7,7 @@
 #define DOWN "\x1b[1B"
 #define RIGHT "\x1b[1C"
 #define LEFT "\x1b[1D"
+#define HOME "\x1b[H"
 
 #define NEXTLINE "\x1b[1E"
 #define PREVLINE "\x1b[1F"
