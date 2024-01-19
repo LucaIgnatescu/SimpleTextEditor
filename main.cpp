@@ -78,27 +78,34 @@ void parseFile(const std::string &file) {
   inputFile.close();
 }
 
-void draw(){
+void draw() {
   std::cout << ERASESCREEN;
 
-  for(usint i = 0; i < config.nRows; ++i){
+  for (usint i = 0; i < config.nRows; ++i) {
     i += config.currLine;
     std::cout << config.lines[i] << NEXTLINE;
   }
 }
 
-int main() {
-  std::cout << std::unitbuf << ERASESCREEN << HOME;
-
-  enableRawMode();
-  getTerminalSize(0); 
-  parseFile("main.cpp");
-  draw();
-
+void registerHandler(){
   struct sigaction resize;
   resize.sa_handler = getTerminalSize;
   sigaction(SIGWINCH, &resize, NULL);
+}
+
+void init(){
+  std::cout << std::unitbuf << ERASESCREEN << HOME;
+  enableRawMode();
+  getTerminalSize(0);
+  registerHandler();
+  parseFile("main.cpp");
+}
+
+
+int main() {
   
+  init();
+  draw();
 
   char key;
   while (std::cin.get(key) && key != 'q') {
