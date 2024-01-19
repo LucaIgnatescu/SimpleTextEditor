@@ -11,6 +11,8 @@
 
 typedef unsigned short int usint;
 
+void draw();
+
 class Line {
 public:
   Line(const std::string &line) : text(line){};
@@ -56,12 +58,17 @@ void enableRawMode() {
   tcsetattr(STDERR_FILENO, TCSAFLUSH, &raw);
 }
 
-void getTerminalSize(int) {
+void getTerminalSize() {
   winsize w;
   ioctl(STDIN_FILENO, TIOCGWINSZ, &w);
   config.nCols = w.ws_col;
   config.nRows = w.ws_row;
   config.lines.reserve(config.nRows);
+}
+
+void handleWINCH(int) {
+  getTerminalSize();
+  draw();
 }
 
 void parseFile(const std::string &file) {
@@ -79,7 +86,7 @@ void parseFile(const std::string &file) {
 }
 
 void draw() {
-  std::cout << ERASESCREEN;
+  std::cout << HOME << ERASESCREEN;
 
   for (usint i = 0; i < config.nRows; ++i) {
     i += config.currLine;
@@ -87,29 +94,31 @@ void draw() {
   }
 }
 
-void registerHandler(){
+void registerHandler() {
   struct sigaction resize;
-  resize.sa_handler = getTerminalSize;
+  resize.sa_handler = handleWINCH;
   sigaction(SIGWINCH, &resize, NULL);
 }
 
-void init(){
+void init() {
   std::cout << std::unitbuf << ERASESCREEN << HOME;
   enableRawMode();
-  getTerminalSize(0);
+  getTerminalSize();
   registerHandler();
   parseFile("main.cpp");
 }
 
-
 int main() {
-  
+
   init();
   draw();
 
   char key;
   while (std::cin.get(key) && key != 'q') {
-    std::cout << key;
+    if (key == '\x1b')
+      continue;
+    else
+      std::cout << key;
     if (key == 'n') {
       std::cout << NEXTLINE;
     }
