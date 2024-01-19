@@ -14,6 +14,7 @@
 
 #define ERASESCREEN "\x1b[2J"
 #define ERASELINE "\x1b[2K"
+#define CLEAR "\x1b[H"
 
 #define RESETTEXT "\x1b[0m"
 #define COLOR256F(color) "\x1b[38;5;" #color "m"
