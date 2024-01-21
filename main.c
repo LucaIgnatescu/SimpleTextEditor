@@ -1,9 +1,11 @@
-#include <errno.h>
 #define _BSD_SOURCE
 #define _DEFAULT_SOURCE
 
 #include "keymaps.h"
+#include <signal.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,7 +49,7 @@ void setStdinFD() {
     printf("Could not set standard out \n");
     exit(0);
   }
-  printf("Set standard out"NEXTLINE);
+  printf("Set standard out" NEXTLINE);
 }
 
 void resetScreen() {
@@ -55,11 +57,38 @@ void resetScreen() {
   write(STDOUT_FILENO, buf, strlen(buf));
 }
 
+void getTerminalSize(){
+  struct winsize ws;
+  if(ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == -1)
+    exit(1);
+  config.nRows = ws.ws_row;
+  config.nCols = ws.ws_col;
+}
+
+void handleWINCH(int){
+  getTerminalSize();
+  const char buf[100];
+  sprintf(buf, "%d %d" NEXTLINE, config.nRows, config.nCols);
+  write(STDOUT_FILENO, buf, strlen(buf));
+}
+
+void registerWINCHandler(){
+  struct sigaction act;
+  memset(&act, 0, sizeof(act));
+  act.sa_handler = handleWINCH;
+  sigaction(SIGWINCH, &act, NULL);
+
+}
+
+
+
 void init() {
   memset(&config, 0, sizeof(config));
   terminalMakeRaw();
+  getTerminalSize();
   resetScreen();
   setStdinFD();
+  registerWINCHandler();
   atexit(restoreTerminal);
 }
 
@@ -74,7 +103,7 @@ int main() {
       if (k == 'q')
         break;
       char buf[30];
-      sprintf(buf, "%c"NEXTLINE, k);
+      sprintf(buf, "%c" NEXTLINE, k);
       write(STDOUT_FILENO, buf, strlen(buf));
     }
   }
