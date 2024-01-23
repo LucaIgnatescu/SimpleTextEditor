@@ -4,6 +4,7 @@
 #include "keymaps.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,32 +17,65 @@
 typedef unsigned short int usint;
 typedef struct termios termios;
 
-typedef struct Line{
-  char * text;
+typedef struct Line {
+  char *text;
+  size_t len;
 } Line;
+
+typedef struct Lines {
+  usint capacity, n;
+  Line *data;
+} Lines;
 
 typedef struct Config {
   termios initialConfig;
   usint nRows, nCols;
+  Lines text;
 } Config;
 
 Config config;
 
-
-void renderLine(const Line * line){
-  if (config.nCols == 0) return;
-  const size_t chunk = config.nCols;
-  char * buf = (char *) malloc((chunk + 1) * sizeof(char));
-  // memset(buf, 0, 0);
-
-  buf[chunk] = '\0';
-
-  size_t length = strlen(line->text);
-  
-  for(size_t i = 0; i < length; i += chunk){
-    memcpy(buf, line + i, chunk);
-    write()
+void addLine(Lines *lines, Line line) {
+  if (lines->n < lines->capacity) {
+    lines->data[lines->n] = line;
+    lines->n++;
+    return;
   }
+  lines->capacity *= 2;
+  Line *newLines = (Line *)malloc(lines->capacity * sizeof(Line));
+  for (size_t i = 0; i < lines->n; ++i) {
+    newLines[i] = lines->data[i];
+  }
+  newLines[lines->n] = line;
+  lines->n++;
+  free(lines->data);
+  lines->data = newLines;
+}
+
+char *renderLine(const Line line) {
+  char buff[USHRT_MAX] = {0};
+  char *text = line.text;
+  ssize_t chunk = config.nCols;
+  size_t length = line.len;
+  size_t buffSize = (chunk + strlen(NEXTLINE)) * ((size_t)length / chunk + 1);
+  char *ans = malloc(buffSize * sizeof(char));
+  ans[0] = '\0';
+
+  if (length < chunk) {
+    strcat(ans, text);
+    return ans;
+  }
+  for (size_t i = 0; i < length - chunk; i += chunk) {
+    memcpy(buff, text + i, chunk);
+    buff[chunk] = '\0';
+    strcat(ans, buff);
+    strcat(ans, NEXTLINE);
+  }
+  size_t tail = length % chunk ? length % chunk : chunk;
+  memcpy(buff, text + length - tail, tail);
+  buff[tail] = '\0';
+  strcat(ans, buff);
+  return ans;
 }
 
 void terminalMakeRaw() {
@@ -70,7 +104,6 @@ void setStdinFD() {
     printf("Could not set standard out \n");
     exit(0);
   }
-  printf("Set standard out" NEXTLINE);
 }
 
 void resetScreen() {
@@ -101,17 +134,40 @@ void registerWINCHandler() {
   sigaction(SIGWINCH, &sa, NULL);
 }
 
-void parseFile(){
+void parseFile() {
+  char *fileName = "test.c";
+  FILE *fp = fopen(fileName, "r");
+  char *line = NULL;
+  size_t buffLen, charsRead;
 
+  if (fp == NULL) {
+    exit(EXIT_FAILURE);
+  }
+  while ((charsRead = getline(&line, &buffLen, fp)) != -1) {
+    write(STDOUT_FILENO, line, charsRead);
+    write(STDOUT_FILENO, NEXTLINE, strlen(NEXTLINE));
+    Line newLine = {.len = charsRead, .text = line};
+    char *line = renderLine(newLine);
+    // write(STDOUT_FILENO, line, strlen(line));
+    addLine(&config.text, newLine);
+    free(line);
+    line = NULL;
+  }
+
+  fclose(fp);
 }
 
 void init() {
   memset(&config, 0, sizeof(config));
+  config.text.capacity = 4;
+  config.text.n = 0;
+  config.text.data = malloc(config.text.capacity * sizeof(Line));
   terminalMakeRaw();
   getTerminalSize();
   resetScreen();
   setStdinFD();
   registerWINCHandler();
+  parseFile();
   atexit(restoreTerminal);
 }
 
@@ -119,16 +175,17 @@ int main() {
   init();
 
   char k = '\0';
+
+  char *line = renderLine(config.text.data[0]);
+  // write(STDOUT_FILENO, line, strlen(line));
+
   while (true) {
     ssize_t bytesRead = read(STDIN_FILENO, &k, 1);
     char buf[30];
-    if (bytesRead == 1) {
-      if (k == 'q')
-        break;
-      char buf[30];
-      sprintf(buf, "%c" NEXTLINE, k);
-      write(STDOUT_FILENO, buf, strlen(buf));
-    }
+    if (bytesRead != 1)
+      continue;
+    if (k == 'q')
+      break;
   }
   return 0;
 }
