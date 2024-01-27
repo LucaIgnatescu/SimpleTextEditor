@@ -9,6 +9,7 @@
 #define LEFT "\x1b[1D"
 #define HOME "\x1b[H"
 
+#define STARTLINE "\x1b[0E" 
 #define NEXTLINE "\x1b[1E"
 #define PREVLINE "\x1b[1F"
 

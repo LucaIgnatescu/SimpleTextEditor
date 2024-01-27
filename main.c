@@ -35,6 +35,8 @@ typedef struct Config {
 
 Config config;
 
+void draw();
+
 void addLine(Lines *lines, Line line) {
   if (lines->n < lines->capacity) {
     lines->data[lines->n] = line;
@@ -121,9 +123,10 @@ void getTerminalSize() {
 
 void handleWINCH(int) {
   getTerminalSize();
-  const char buf[100];
-  sprintf((char *)buf, "%d %d" NEXTLINE, config.nRows, config.nCols);
-  write(STDOUT_FILENO, buf, strlen(buf));
+  // const char buf[100];
+  // sprintf((char *)buf, "%d %d" NEXTLINE, config.nRows, config.nCols);
+  // write(STDOUT_FILENO, buf, strlen(buf));
+  draw();
 }
 
 void registerWINCHandler() {
@@ -144,17 +147,29 @@ void parseFile() {
     exit(EXIT_FAILURE);
   }
   while ((charsRead = getline(&line, &buffLen, fp)) != -1) {
-    write(STDOUT_FILENO, line, charsRead);
-    write(STDOUT_FILENO, NEXTLINE, strlen(NEXTLINE));
-    Line newLine = {.len = charsRead, .text = line};
-    char *line = renderLine(newLine);
-    // write(STDOUT_FILENO, line, strlen(line));
+    line[charsRead - 1] = '\0';
+    Line newLine = {.len = charsRead - 1, .text = line};
     addLine(&config.text, newLine);
-    free(line);
     line = NULL;
   }
 
   fclose(fp);
+}
+
+void draw(){
+  resetScreen();
+  char * buf = (char *) malloc(config.nCols * config.nRows* 8 * sizeof(char));
+  buf[0] = '\0';
+  for (size_t i = 0; i < config.text.n; ++i) {
+    Line line = config.text.data[i];
+    // printf("%ld %s" NEXTLINE, i, renderLine(line));
+    char * parsedLine = renderLine(line);
+    strcat(buf, parsedLine);
+    strcat(buf, NEXTLINE);
+    free(parsedLine);//change with memcpy for linear runtime
+  }
+
+  write(STDOUT_FILENO, buf, strlen(buf));
 }
 
 void init() {
@@ -164,26 +179,29 @@ void init() {
   config.text.data = malloc(config.text.capacity * sizeof(Line));
   terminalMakeRaw();
   getTerminalSize();
-  resetScreen();
   setStdinFD();
   registerWINCHandler();
   parseFile();
+  draw();
   atexit(restoreTerminal);
 }
+
 
 int main() {
   init();
 
   char k = '\0';
-
-  char *line = renderLine(config.text.data[0]);
-  // write(STDOUT_FILENO, line, strlen(line));
-
+  // for (size_t i = 0; i < config.text.n; ++i) {
+  //   Line line = config.text.data[i];
+  //   printf("%ld %s" NEXTLINE, i, renderLine(line));
+  // }
+  // fflush(stdout);
   while (true) {
     ssize_t bytesRead = read(STDIN_FILENO, &k, 1);
     char buf[30];
     if (bytesRead != 1)
       continue;
+    write(STDOUT_FILENO,&k, 1);
     if (k == 'q')
       break;
   }
