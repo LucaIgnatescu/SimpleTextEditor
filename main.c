@@ -30,7 +30,9 @@ typedef struct Lines {
 typedef struct Config {
   termios initialConfig;
   usint nRows, nCols;
+  usint lineOffset;
   Lines text;
+  char *fileName;
 } Config;
 
 Config config;
@@ -138,10 +140,11 @@ void registerWINCHandler() {
 }
 
 void parseFile() {
-  char *fileName = "test.c";
+  char *fileName = "test.txt";
   FILE *fp = fopen(fileName, "r");
   char *line = NULL;
   size_t buffLen, charsRead;
+  config.fileName = fileName;
 
   if (fp == NULL) {
     exit(EXIT_FAILURE);
@@ -156,19 +159,42 @@ void parseFile() {
   fclose(fp);
 }
 
-void draw(){
+void draw() {
   resetScreen();
-  char * buf = (char *) malloc(config.nCols * config.nRows* 8 * sizeof(char));
+  char *buf = (char *)malloc(config.nCols * config.nRows * 8 * sizeof(char));
   buf[0] = '\0';
-  for (size_t i = 0; i < config.text.n; ++i) {
-    Line line = config.text.data[i];
-    // printf("%ld %s" NEXTLINE, i, renderLine(line));
-    char * parsedLine = renderLine(line);
-    strcat(buf, parsedLine);
+  usint rows = config.nRows - 1;
+  config.lineOffset = 41;
+  size_t range = rows + config.lineOffset > config.text.n
+                     ? config.text.n - config.lineOffset
+                     : rows;
+  range = config.text.n > config.lineOffset ? range : 0;
+  size_t overflow = 0;
+  for (size_t i = 0; i < range; ++i) {
+    Line line = config.text.data[i + config.lineOffset];
+    // char *parsedLine = renderLine(line);
+    char lineNum[10];
+    size_t numLines = line.len / config.nCols;
+    if (line.len % config.nCols != 0)
+      numLines += 1;
+    else if (line.len == 0)
+      numLines = 1;
+    overflow += numLines - 1;
+
+    strcat(buf, line.text);
+    strcat(buf, lineNum);
     strcat(buf, NEXTLINE);
-    free(parsedLine);//change with memcpy for linear runtime
+    // change with memcpy for linear runtime
   }
 
+  for (size_t i = range; i < rows; ++i) {
+    strcat(buf, "~" NEXTLINE);
+  }
+  char lastLine[2 * config.nCols + 1];
+  char *setColor = "\x1b[38;5;51m";
+  sprintf(lastLine, "%stest.txt | %hu lines | %ld \x1b[0m", setColor,
+          config.text.n, overflow); // Add more data
+  strcat(buf, lastLine);
   write(STDOUT_FILENO, buf, strlen(buf));
 }
 
@@ -183,27 +209,39 @@ void init() {
   registerWINCHandler();
   parseFile();
   draw();
+  write(STDOUT_FILENO, HOME, 4);
   atexit(restoreTerminal);
 }
 
+void processKeypress(char k) {
+  if (k == 'q')
+    exit(0);
+
+  switch (k) {
+  case 'j':
+    write(STDOUT_FILENO, DOWN, 4);
+    break;
+  case 'h':
+    write(STDOUT_FILENO, LEFT, 4);
+    break;
+  case 'k':
+    write(STDOUT_FILENO, UP, 4);
+    break;
+  case 'l':
+    write(STDOUT_FILENO, RIGHT, 4);
+    break;
+  }
+}
 
 int main() {
   init();
-
   char k = '\0';
-  // for (size_t i = 0; i < config.text.n; ++i) {
-  //   Line line = config.text.data[i];
-  //   printf("%ld %s" NEXTLINE, i, renderLine(line));
-  // }
-  // fflush(stdout);
   while (true) {
     ssize_t bytesRead = read(STDIN_FILENO, &k, 1);
     char buf[30];
     if (bytesRead != 1)
       continue;
-    write(STDOUT_FILENO,&k, 1);
-    if (k == 'q')
-      break;
+    processKeypress(k);
   }
   return 0;
 }

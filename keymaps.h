@@ -2,6 +2,7 @@
 #define KEYMAPS
 
 // Macros from https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
+#define ESC '\x1b'
 
 #define UP "\x1b[1A"
 #define DOWN "\x1b[1B"
