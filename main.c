@@ -35,7 +35,12 @@ typedef struct Config {
   char *fileName;
 } Config;
 
+typedef struct Cursor {
+  usint termRow, termCol, lineIndex, lineOffset;
+} Cursor;
+
 Config config;
+Cursor cursor;
 
 void draw();
 
@@ -125,9 +130,6 @@ void getTerminalSize() {
 
 void handleWINCH(int) {
   getTerminalSize();
-  // const char buf[100];
-  // sprintf((char *)buf, "%d %d" NEXTLINE, config.nRows, config.nCols);
-  // write(STDOUT_FILENO, buf, strlen(buf));
   draw();
 }
 
@@ -160,11 +162,11 @@ void parseFile() {
 }
 
 void draw() {
+  write(STDOUT_FILENO, SAVECURSOR, 3);
   resetScreen();
   char *buf = (char *)malloc(config.nCols * config.nRows * 8 * sizeof(char));
   buf[0] = '\0';
   usint rows = config.nRows - 1;
-  config.lineOffset = 41;
   size_t range = rows + config.lineOffset > config.text.n
                      ? config.text.n - config.lineOffset
                      : rows;
@@ -180,7 +182,6 @@ void draw() {
     else if (line.len == 0)
       numLines = 1;
     overflow += numLines - 1;
-
     strcat(buf, line.text);
     strcat(buf, lineNum);
     strcat(buf, NEXTLINE);
@@ -196,10 +197,12 @@ void draw() {
           config.text.n, overflow); // Add more data
   strcat(buf, lastLine);
   write(STDOUT_FILENO, buf, strlen(buf));
+  write(STDOUT_FILENO, RESTORECURSOR, 3);
 }
 
 void init() {
   memset(&config, 0, sizeof(config));
+  memset(&cursor, 0, sizeof(cursor));
   config.text.capacity = 4;
   config.text.n = 0;
   config.text.data = malloc(config.text.capacity * sizeof(Line));
@@ -218,21 +221,41 @@ void processKeypress(char k) {
     exit(0);
 
   switch (k) {
-  case 'j':
-    write(STDOUT_FILENO, DOWN, 4);
-    break;
-  case 'h':
-    write(STDOUT_FILENO, LEFT, 4);
-    break;
-  case 'k':
-    write(STDOUT_FILENO, UP, 4);
-    break;
-  case 'l':
-    write(STDOUT_FILENO, RIGHT, 4);
-    break;
-  }
+    /** Movement **/
+    case 'j':
+      if (cursor.lineIndex == config.text.n - 1) {
+        return;
+      }
+      if (cursor.termRow < config.nRows - 2) {
+        write(STDOUT_FILENO, DOWN, 4);
+        cursor.lineIndex++;
+        cursor.termRow++;
+      } else{
+        config.lineOffset++;
+        cursor.lineIndex++;
+        draw();
+      }
+      break;
+    case 'h':
+      write(STDOUT_FILENO, LEFT, 4);
+      break;
+    case 'k':
+      if(cursor.lineIndex == 0) return;
+      if (cursor.termRow > 0){
+       write(STDOUT_FILENO, UP, 4);
+        cursor.termRow --;
+        cursor.lineIndex --;
+      } else if(config.lineOffset > 0){
+        config.lineOffset --;
+        cursor.lineIndex --;
+        draw();
+      }
+      break;
+    case 'l':
+      write(STDOUT_FILENO, RIGHT, 4);
+      break;
+    }
 }
-
 int main() {
   init();
   char k = '\0';
